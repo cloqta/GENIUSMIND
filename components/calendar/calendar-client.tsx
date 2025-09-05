@@ -11,7 +11,7 @@ import WeekView from "./week-view"
 import DayView from "./day-view"
 import YearView from "./year-view"
 import EventModal from "./event-modal"
-import { useEvents } from "@/hooks/use-events"
+import { useEvents, type CalendarEvent } from "@/hooks/use-events"
 import { getBrowserClient } from "@/lib/supabase/browser-client"
 import { FiltersBar, type CampaignType, type StatusType } from "./filters-bar"
 
@@ -29,7 +29,8 @@ export default function CalendarClient({ userId }: { userId: string }) {
   const [campaignTypes, setCampaignTypes] = useState<CampaignType[]>([])
   const [statuses, setStatuses] = useState<StatusType[]>([])
 
-  const { events, isLoading, refetch } = useEvents(userId)
+  // 🔥 FIXED: Pass cursor and view instead of userId
+  const { events, isLoading, refetch } = useEvents(cursor, view)
 
   useEffect(() => {
     const supabase = getBrowserClient()
@@ -55,6 +56,7 @@ export default function CalendarClient({ userId }: { userId: string }) {
     else if (view === "day") setCursor((d) => addDays(d, 1))
     else setCursor((d) => addMonths(d, 12))
   }
+  
   const prev = () => {
     if (view === "month") setCursor((d) => addMonths(d, -1))
     else if (view === "week") setCursor((d) => addWeeks(d, -1))
@@ -97,7 +99,7 @@ export default function CalendarClient({ userId }: { userId: string }) {
     }
     window.addEventListener("keydown", handler)
     return () => window.removeEventListener("keydown", handler)
-  }, [userId]) // Removed prev and next from dependencies
+  }, [])
 
   const title = useMemo(() => {
     return cursor.toLocaleString(undefined, {
@@ -107,10 +109,10 @@ export default function CalendarClient({ userId }: { userId: string }) {
     })
   }, [cursor, view])
 
-  // Filtered events
+  // Filtered events - now properly typed as CalendarEvent[]
   const filteredEvents = useMemo(() => {
     const term = qDebounced.trim().toLowerCase()
-    return events.filter((e: any) => {
+    return events.filter((e: CalendarEvent) => {
       const matchesQ = !term || e.title?.toLowerCase().includes(term) || e.description?.toLowerCase().includes(term)
       const matchesCampaign = campaignTypes.length === 0 || campaignTypes.includes(e.campaign_type)
       const matchesStatus = statuses.length === 0 || statuses.includes(e.status)
@@ -122,6 +124,7 @@ export default function CalendarClient({ userId }: { userId: string }) {
     setEditingEventId(null)
     setModalOpen(true)
   }
+  
   const onEdit = (id: string) => {
     setEditingEventId(id)
     setModalOpen(true)
@@ -208,10 +211,10 @@ export default function CalendarClient({ userId }: { userId: string }) {
         </header>
 
         <section className="pt-4">
-          {view === "month" && <MonthView date={cursor} events={filteredEvents as any[]} onEdit={onEdit} />}
-          {view === "week" && <WeekView date={cursor} events={filteredEvents as any[]} onEdit={onEdit} />}
-          {view === "day" && <DayView date={cursor} events={filteredEvents as any[]} onEdit={onEdit} />}
-          {view === "year" && <YearView date={cursor} events={filteredEvents as any[]} onEdit={onEdit} />}
+          {view === "month" && <MonthView date={cursor} events={filteredEvents} onEdit={onEdit} />}
+          {view === "week" && <WeekView date={cursor} events={filteredEvents} onEdit={onEdit} />}
+          {view === "day" && <DayView date={cursor} events={filteredEvents} onEdit={onEdit} />}
+          {view === "year" && <YearView date={cursor} events={filteredEvents} onEdit={onEdit} />}
         </section>
       </main>
 
