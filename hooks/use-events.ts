@@ -5,12 +5,13 @@ import { getBrowserClient } from "@/lib/supabase/browser-client"
 import { startOfMonth, endOfMonth, startOfWeek, endOfWeek, startOfDay, endOfDay } from "date-fns"
 import { useEffect } from "react"
 
+// Database type (what Supabase returns)
 export type DbEvent = {
   id: string
   title: string
   description?: string
-  start_time: string
-  end_time: string
+  start_time: string  // This is a string from database
+  end_time: string    // This is a string from database
   campaign_type: "email" | "social" | "content" | "ads" | "events" | "analytics"
   status: "planned" | "in_progress" | "completed" | "cancelled"
   priority: "low" | "medium" | "high" | "urgent"
@@ -20,11 +21,26 @@ export type DbEvent = {
   recurrence?: "none" | "daily" | "weekly" | "monthly"
 }
 
+// Frontend type (what calendar components expect)
+export type CalendarEvent = Omit<DbEvent, 'start_time' | 'end_time'> & {
+  start_time: Date  // Converted to Date object
+  end_time: Date    // Converted to Date object
+}
+
 function computeRange(cursor: Date, view: "month" | "week" | "day" | "year") {
   if (view === "month") return [startOfMonth(cursor), endOfMonth(cursor)]
   if (view === "week") return [startOfWeek(cursor, { weekStartsOn: 1 }), endOfWeek(cursor, { weekStartsOn: 1 })]
   if (view === "day") return [startOfDay(cursor), endOfDay(cursor)]
   return [new Date(cursor.getFullYear(), 0, 1), new Date(cursor.getFullYear(), 11, 31, 23, 59, 59)]
+}
+
+// Helper function to convert database events to calendar events
+function convertDbEventToCalendarEvent(dbEvent: DbEvent): CalendarEvent {
+  return {
+    ...dbEvent,
+    start_time: new Date(dbEvent.start_time),
+    end_time: new Date(dbEvent.end_time)
+  }
 }
 
 export function useEvents(cursor: Date, view: "month" | "week" | "day" | "year") {
@@ -34,7 +50,7 @@ export function useEvents(cursor: Date, view: "month" | "week" | "day" | "year")
 
   const q = useQuery({
     queryKey: ["events", view, start.toISOString(), end.toISOString()],
-    queryFn: async () => {
+    queryFn: async (): Promise<CalendarEvent[]> => {
       try {
         const { data, error } = await supabase
           .from("events")
@@ -42,12 +58,16 @@ export function useEvents(cursor: Date, view: "month" | "week" | "day" | "year")
           .gte("start_time", start.toISOString())
           .lte("start_time", end.toISOString())
           .order("start_time", { ascending: true })
+        
         if (error) throw error
-        return (data || []) as DbEvent[]
+        
+        // 🔥 KEY FIX: Convert string dates to Date objects
+        const eventsWithDates = (data || []).map(convertDbEventToCalendarEvent)
+        return eventsWithDates
       } catch (err: any) {
         // If table doesn't exist yet or RLS blocks, return empty instead of crashing UI
         console.log("[v0] useEvents error:", err?.message || err)
-        return [] as DbEvent[]
+        return []
       }
     },
   })
@@ -74,10 +94,10 @@ export function useEventById(id: string | null) {
   return useQuery({
     queryKey: ["event", id],
     enabled: !!id,
-    queryFn: async () => {
+    queryFn: async (): Promise<CalendarEvent | null> => {
       const { data, error } = await supabase.from("events").select("*").eq("id", id).single()
       if (error) throw error
-      return data as DbEvent
+      return convertDbEventToCalendarEvent(data as DbEvent)
     },
   })
 }
@@ -89,7 +109,7 @@ export function useCreateEvent() {
     mutationFn: async (payload: Partial<DbEvent>) => {
       const { data, error } = await supabase.from("events").insert(payload).select("*").single()
       if (error) throw error
-      return data as DbEvent
+      return convertDbEventToCalendarEvent(data as DbEvent)
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["events"] }),
   })
@@ -102,7 +122,7 @@ export function useUpdateEvent() {
     mutationFn: async ({ id, ...payload }: Partial<DbEvent> & { id: string }) => {
       const { data, error } = await supabase.from("events").update(payload).eq("id", id).select("*").single()
       if (error) throw error
-      return data as DbEvent
+      return convertDbEventToCalendarEvent(data as DbEvent)
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["events"] }),
   })
