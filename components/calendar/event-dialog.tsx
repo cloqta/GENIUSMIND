@@ -20,14 +20,14 @@ export function AddEventDialog({
   onOpenChange: (open: boolean) => void
   dateDefault?: Date
 }) {
-  const createMutation = useCreateEvent() // ✅ Use the mutation hook
+  const createMutation = useCreateEvent() // ✅ Use the correct hook
   const [title, setTitle] = useState("")
   const [description, setDescription] = useState("")
-  const [startTime, setStartTime] = useState("") // ✅ Changed from startAt
-  const [endTime, setEndTime] = useState("") // ✅ Changed from endAt
-  const [campaignType, setCampaignType] = useState("email") // ✅ Changed from channel
-  const [status, setStatus] = useState("planned") // ✅ Added status
-  const [priority, setPriority] = useState("medium") // ✅ Added priority
+  const [startTime, setStartTime] = useState("") // ✅ Fixed field name
+  const [endTime, setEndTime] = useState("") // ✅ Fixed field name
+  const [campaignType, setCampaignType] = useState("email") // ✅ Fixed field name
+  const [status, setStatus] = useState("planned") // ✅ Added required field
+  const [priority, setPriority] = useState("medium") // ✅ Added required field
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -35,7 +35,7 @@ export function AddEventDialog({
     if (open && dateDefault) {
       const iso = formatISO(dateDefault).slice(0, 16)
       setStartTime(iso)
-      // Set end time to 1 hour later by default
+      // Set end time to 1 hour later
       const endDate = new Date(dateDefault.getTime() + 60 * 60 * 1000)
       setEndTime(formatISO(endDate).slice(0, 16))
     }
@@ -45,19 +45,33 @@ export function AddEventDialog({
     e.preventDefault()
     setSaving(true)
     setError(null)
+    
     try {
+      console.log("🚀 Creating event with data:", {
+        title,
+        description,
+        start_time: startTime,
+        end_time: endTime,
+        campaign_type: campaignType,
+        status,
+        priority,
+      })
+
       await createMutation.mutateAsync({
         title,
         description,
         start_time: new Date(startTime).toISOString(), // ✅ Correct field name
         end_time: new Date(endTime).toISOString(), // ✅ Correct field name
         campaign_type: campaignType as "email" | "social" | "content" | "ads" | "events" | "analytics", // ✅ Correct field name
-        status: status as "planned" | "in_progress" | "completed" | "cancelled",
-        priority: priority as "low" | "medium" | "high" | "urgent",
-        is_all_day: false,
-        budget: null,
+        status: status as "planned" | "in_progress" | "completed" | "cancelled", // ✅ Required field
+        priority: priority as "low" | "medium" | "high" | "urgent", // ✅ Required field
+        is_all_day: false, // ✅ Required field
+        budget: null, // ✅ Optional field
       })
+      
+      console.log("✅ Event created successfully!")
       onOpenChange(false)
+      
       // Reset form
       setTitle("")
       setDescription("")
@@ -66,8 +80,9 @@ export function AddEventDialog({
       setCampaignType("email")
       setStatus("planned")
       setPriority("medium")
+      
     } catch (err: any) {
-      console.error('Event creation error:', err)
+      console.error("❌ Event creation error:", err)
       setError(err?.message ?? "Failed to create event")
     } finally {
       setSaving(false)
@@ -152,7 +167,11 @@ export function AddEventDialog({
             <label className="mb-1 block text-sm font-medium">Description</label>
             <Textarea rows={3} value={description} onChange={(e) => setDescription(e.target.value)} />
           </div>
-          {error && <p className="text-sm text-red-600">{error}</p>}
+          {error && (
+            <div className="rounded-md bg-red-50 p-3">
+              <p className="text-sm text-red-600">{error}</p>
+            </div>
+          )}
           <div className="mt-2 flex justify-end gap-2">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
